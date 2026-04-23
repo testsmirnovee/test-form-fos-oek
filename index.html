@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Форма обратной связи ОЭК</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #f0f2f5;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+        }
+
+        .form-card {
+            max-width: 809px;
+            width: 100%;
+            background: white;
+            border-radius: 11px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .form-header {
+            background: #ffffff;
+            padding: 32px 32px 0 32px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .form-header h1 {
+            font-size: 1.9rem;
+            font-weight: 600;
+            color: #000000;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-body {
+            padding: 20px 32px 32px 32px;
+        }
+
+        .question-group {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e5e5e5;
+            display: flex;
+            flex-wrap: wrap;
+        }
+        
+        .question-label {
+            width: 30%;
+            padding-right: 20px;
+        }
+        
+        .question-field {
+            width: 70%;
+        }
+
+        .question-label label {
+            font-weight: 500;
+            font-size: 15px;
+            line-height: 20px;
+            color: #000000;
+            display: inline-block;
+        }
+
+        .required-star {
+            color: #ea0805;
+            margin-right: 4px;
+            font-size: 15px;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 15px;
+            font-family: inherit;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            background-color: rgb(255, 255, 255);
+            transition: all 0.2s;
+            outline: none;
+            color: #000000;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            border-color: #5282ff;
+            box-shadow: 0 0 0 2px rgba(82, 130, 255, 0.2);
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+        }
+        
+        .radio-option input {
+            width: 18px;
+            height: 18px;
+            accent-color: #5282ff;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .radio-option span {
+            font-size: 15px;
+            color: #000000;
+        }
+
+        .checkbox-group {
+            margin: 24px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .checkbox-group input {
+            width: 18px;
+            height: 18px;
+            accent-color: #5282ff;
+            margin: 0;
+        }
+        
+        .checkbox-group label {
+            font-size: 15px;
+            font-weight: 500;
+            color: #000000;
+            cursor: pointer;
+        }
+
+        .submit-btn {
+            background: #5282ff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            width: auto;
+            min-width: 180px;
+            transition: background 0.2s;
+            font-family: inherit;
+        }
+
+        .submit-btn:hover {
+            background: #4e79eb;
+        }
+        
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            color: #ea0805;
+            font-size: 13px;
+            margin-top: 6px;
+            display: none;
+        }
+        
+        .field-error {
+            border-color: #ea0805 !important;
+            background-color: #fff5f5 !important;
+        }
+
+        .toast-notification {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 60px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            z-index: 1000;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            animation: fadeUp 0.3s ease;
+            text-align: center;
+            max-width: 90%;
+            word-break: break-word;
+        }
+        
+        .toast-notification.error {
+            background: #dc2626;
+        }
+        
+        .toast-notification.success {
+            background: #10b981;
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        @media (max-width: 700px) {
+            .question-label, .question-field {
+                width: 100%;
+                padding-right: 0;
+            }
+            .question-label {
+                margin-bottom: 10px;
+            }
+            .form-body {
+                padding: 20px;
+            }
+            .form-header {
+                padding: 24px 20px 0 20px;
+            }
+        }
+        
+        .file-input-wrapper input {
+            padding: 10px;
+            background: #f9fafb;
+        }
+        
+        .file-hint {
+            font-size: 12px;
+            color: #808080;
+            margin-top: 5px;
+        }
+        
+        .file-list {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #4a5568;
+        }
+        
+        .file-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        
+        .file-list-item .remove-file {
+            color: #ea0805;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0 8px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="form-card">
+    <div class="form-header">
+        <h1>Форма обратной связи ОЭК</h1>
+    </div>
+    <div class="form-body">
+        <form id="feedbackForm">
+            <!-- 1. ФИО -->
+            <div class="question-group">
+                <div class="question-label">
+                    <label><span class="required-star">*</span> ФИО</label>
+                </div>
+                <div class="question-field">
+                    <input type="text" id="fullname" name="fullname" placeholder=" ">
+                    <div class="error-message" id="error-fullname"></div>
+                </div>
+            </div>
+            
+            <!-- 2. ИНН -->
+            <div class="question-group">
+                <div class="question-label">
+                    <label><span class="required-star">*</span> ИНН</label>
+                </div>
+                <div class="question-field">
+                    <input type="text" id="inn" name="inn" placeholder=" ">
+                    <div class="error-message" id="error-inn"></div>
+                </div>
+            </div>
+            
+            <!-- 3. Наименование организации -->
+            <div class="question-group">
+                <div class="question-label">
+                    <label>Наименование организации</label>
+                </div>
+                <div class="question-field">
+                    <input type="text" id="orgname" name="orgname" placeholder=" ">
+                </div>
+            </div>
+            
+            <!-- 4. Email -->
+            <div class="question-group">
+                <div class="question-label">
+                    <label><span class="required-star">*</span> Электронная почта</label>
+                </div>
+                <div class="question-field">
+                    <input type="email" id="email" name="email" placeholder=" ">
+                    <div class="error-message" id="error-email"></div>
+                </div>
+            </div>
+            
+            <!-- 5. Телефон -->
+            <div class="question-group">
+                <div class="question-label">
+                    <label>Телефон</label>
+                </div>
+                <div class="question-field">
+                    <input type="tel" id="phone" name="phone" placeholder=" ">
+                </div>
+            </div>
+            
+            <!-- 6. Тип издания -->
+            <div class="question-group">
+                <div class="question-label">
+                    <label>Тип издания</label>
+                </div>
+                <div class="question-field">
+                    <div class="radio-group" id="publicationTypeGroup">
+                        <label class="radio-option">
+                            <input type="radio" name="publicationType" value="book" id="pubBook"> 
+                            <span>Книга / Журнал / Газета</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="publicationType" value="dissertation" id="pubDiss" checked> 
+                            <span>Диссертации / Авторефераты</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 7. Цель обращения -->
+            <div class="question-group">
+                <div class="question-label">
+                    <label>Цель обращения</label>
+                </div>
+                <div class="question-field">
+                    <div class="radio-group" id="purposeGroup">
+                        <label class="radio-option purpose-base">
+                            <input type="radio" name="purpose" value="ошибка в файле"> 
+                            <span>ошибка в файле</span>
+                        </label>
+                        <label class="radio-option purpose-base">
+                            <input type="radio" name="purpose" value="ошибка подписи"> 
+                            <span>ошибка подписи</span>
+                        </label>
+                        <label class="radio-option purpose-base">
+                            <input type="radio" name="purpose" value="данные в ЛК"> 
+                            <span>данные в ЛК</span>
+                        </label>
+                        <label class="radio-option purpose-base">
+                            <input type="radio" name="purpose" value="иное"> 
+                            <span>иное</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 8. Тема обращения -->
+            <div class="question-group">
+                <div class="question-label">
+                    <label>Тема обращения</label>
+                </div>
+                <div class="question-field">
+                    <input type="text" id="subject" name="subject" placeholder=" ">
+                </div>
+            </div>
+            
+            <!-- 9. Текст обращения -->
+            <div class="question-group">
+                <div class="question-label">
+                    <label><span class="required-star">*</span> Текст обращения</label>
+                </div>
+                <div class="question-field">
+                    <textarea id="description" name="description" rows="6" placeholder=" "></textarea>
+                    <div class="error-message" id="error-description"></div>
+                </div>
+            </div>
+            
+            <!-- 10. Файл -->
+            <div class="question-group">
+                <div class="question-label">
+                    <label>Файл</label>
+                </div>
+                <div class="question-field">
+                    <div class="file-input-wrapper">
+                        <input type="file" id="fileInput" name="file" multiple>
+                        <div class="file-hint">До 20 файлов, допустимый общий размер файлов — 20 МБ.</div>
+                        <div id="fileList" class="file-list">Файлы не выбраны</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 11. Согласие -->
+            <div class="checkbox-group">
+                <input type="checkbox" id="consent" name="consent">
+                <label for="consent">Согласие на обработку</label>
+            </div>
+            <div class="error-message" id="error-consent" style="margin-top: -15px; margin-bottom: 15px;"></div>
+            
+            <button type="submit" class="submit-btn" id="submitBtn">Отправить</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    (function() {
+        // Элементы формы
+        const form = document.getElementById('feedbackForm');
+        const fullname = document.getElementById('fullname');
+        const inn = document.getElementById('inn');
+        const email = document.getElementById('email');
+        const description = document.getElementById('description');
+        const consent = document.getElementById('consent');
+        const pubBook = document.getElementById('pubBook');
+        const pubDiss = document.getElementById('pubDiss');
+        const purposeContainer = document.getElementById('purposeGroup');
+        
+        const errorFullname = document.getElementById('error-fullname');
+        const errorInn = document.getElementById('error-inn');
+        const errorEmail = document.getElementById('error-email');
+        const errorDescription = document.getElementById('error-description');
+        const errorConsent = document.getElementById('error-consent');
+        
+        // Управление файлами
+        let selectedFiles = [];
+        const fileInput = document.getElementById('fileInput');
+        const fileListDiv = document.getElementById('fileList');
+        
+        function updateFileList() {
+            if (selectedFiles.length === 0) {
+                fileListDiv.innerHTML = 'Файлы не выбраны';
+                return;
+            }
+            let html = '';
+            selectedFiles.forEach((file, index) => {
+                html += `
+                    <div class="file-list-item">
+                        <span>📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)</span>
+                        <span class="remove-file" data-index="${index}">✖</span>
+                    </div>
+                `;
+            });
+            fileListDiv.innerHTML = html;
+            
+            document.querySelectorAll('.remove-file').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    const index = parseInt(e.target.dataset.index);
+                    selectedFiles.splice(index, 1);
+                    updateFileList();
+                    const dataTransfer = new DataTransfer();
+                    selectedFiles.forEach(file => dataTransfer.items.add(file));
+                    fileInput.files = dataTransfer.files;
+                });
+            });
+        }
+        
+        fileInput.addEventListener('change', (e) => {
+            const newFiles = Array.from(e.target.files);
+            const totalSize = [...selectedFiles, ...newFiles].reduce((sum, f) => sum + f.size, 0);
+            if (totalSize > 20 * 1024 * 1024) {
+                alert('Общий размер файлов не должен превышать 20 МБ');
+                return;
+            }
+            if (selectedFiles.length + newFiles.length > 20) {
+                alert('Максимум 20 файлов');
+                return;
+            }
+            selectedFiles = [...selectedFiles, ...newFiles];
+            updateFileList();
+        });
+        
+        function getFileNames() {
+            if (selectedFiles.length === 0) return '';
+            return selectedFiles.map(f => f.name).join(', ');
+        }
+        
+        // Динамическое добавление пункта "получение справки"
+        function addCertificateOption() {
+            if (document.getElementById('purpose-certificate')) return;
+            const newOption = document.createElement('label');
+            newOption.className = 'radio-option purpose-dynamic';
+            newOption.id = 'purpose-certificate-wrapper';
+            newOption.innerHTML = `
+                <input type="radio" name="purpose" value="получение справки" id="purpose-certificate">
+                <span>получение справки</span>
+            `;
+            const firstOption = purposeContainer.querySelector('.purpose-base');
+            if (firstOption) {
+                purposeContainer.insertBefore(newOption, firstOption);
+            } else {
+                purposeContainer.appendChild(newOption);
+            }
+        }
+        
+        function removeCertificateOption() {
+            const existingWrapper = document.getElementById('purpose-certificate-wrapper');
+            if (existingWrapper) existingWrapper.remove();
+        }
+        
+        function updatePurposeOptions() {
+            if (pubBook.checked) {
+                addCertificateOption();
+            } else {
+                removeCertificateOption();
+            }
+        }
+        
+        pubBook.addEventListener('change', updatePurposeOptions);
+        pubDiss.addEventListener('change', updatePurposeOptions);
+        updatePurposeOptions();
+        
+        // Валидация
+        function showError(element, message, inputField = null) {
+            element.textContent = message;
+            element.style.display = 'block';
+            if (inputField) {
+                inputField.classList.add('field-error');
+            }
+        }
+        
+        function hideError(element, inputField = null) {
+            element.textContent = '';
+            element.style.display = 'none';
+            if (inputField) {
+                inputField.classList.remove('field-error');
+            }
+        }
+        
+        function validateFullname() {
+            const value = fullname.value.trim();
+            if (value === '') {
+                showError(errorFullname, 'Пожалуйста, заполните ФИО.', fullname);
+                return false;
+            }
+            if (value.length < 2) {
+                showError(errorFullname, 'ФИО должно содержать минимум 2 символа.', fullname);
+                return false;
+            }
+            hideError(errorFullname, fullname);
+            return true;
+        }
+        
+        function validateInn() {
+            const value = inn.value.trim();
+            if (value === '') {
+                showError(errorInn, 'Пожалуйста, заполните ИНН.', inn);
+                return false;
+            }
+            const digits = value.replace(/\D/g, '');
+            if (digits.length !== 10 && digits.length !== 12) {
+                showError(errorInn, 'ИНН должен содержать 10 или 12 цифр.', inn);
+                return false;
+            }
+            hideError(errorInn, inn);
+            return true;
+        }
+        
+        function validateEmail() {
+            const value = email.value.trim();
+            const emailPattern = /^[^\s@]+@([^\s@.,]+\.)+[^\s@.,]{2,}$/;
+            if (value === '') {
+                showError(errorEmail, 'Пожалуйста, заполните электронную почту.', email);
+                return false;
+            }
+            if (!emailPattern.test(value)) {
+                showError(errorEmail, 'Введите корректный email.', email);
+                return false;
+            }
+            hideError(errorEmail, email);
+            return true;
+        }
+        
+        function validateDescription() {
+            const value = description.value.trim();
+            if (value === '') {
+                showError(errorDescription, 'Пожалуйста, заполните текст обращения.', description);
+                return false;
+            }
+            if (value.length < 5) {
+                showError(errorDescription, 'Текст обращения должен содержать минимум 5 символов.', description);
+                return false;
+            }
+            hideError(errorDescription, description);
+            return true;
+        }
+        
+        function validateConsent() {
+            if (!consent.checked) {
+                showError(errorConsent, 'Необходимо согласие на обработку данных.', null);
+                return false;
+            }
+            hideError(errorConsent, null);
+            return true;
+        }
+        
+        function validateForm() {
+            return validateFullname() && validateInn() && validateEmail() && validateDescription() && validateConsent();
+        }
+        
+        function getPublicationTypeValue() {
+            if (pubBook.checked) return 'Книга / Журнал / Газета';
+            if (pubDiss.checked) return 'Диссертации / Авторефераты';
+            return '';
+        }
+        
+        function getPurposeValue() {
+            const selected = document.querySelector('input[name="purpose"]:checked');
+            return selected ? selected.value : '';
+        }
+        
+        function showNotification(message, isError = false) {
+            const existingToast = document.querySelector('.toast-notification');
+            if (existingToast) existingToast.remove();
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification';
+            if (isError) toast.classList.add('error');
+            else toast.classList.add('success');
+            toast.textContent = isError ? `❌ ${message}` : `✅ ${message}`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 5000);
+        }
+        
+        // Отправка на вебхук
+        const WEBHOOK_URL = 'https://rsl.planfix.ru/webhook/json/test_oek';
+        
+        async function sendToWebhook(formDataObj) {
+            const requestBody = {
+                "theme": formDataObj.theme || "",
+                "name": formDataObj.name,
+                "inn": formDataObj.inn,
+                "organization": formDataObj.organization || "",
+                "e-mail": formDataObj.email,
+                "tel": formDataObj.tel || "",
+                "doctype": formDataObj.doctype || "",
+                "purp": formDataObj.purp || "",
+                "issue": formDataObj.issue,
+                "file": formDataObj.file || "",
+                "agree": formDataObj.agree
+            };
+            
+            const response = await fetch(WEBHOOK_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+            
+            const responseText = await response.text();
+            
+            if (!response.ok) {
+                throw new Error(`Ошибка: ${response.status}`);
+            }
+            
+            // Извлекаем ID задачи из ответа {"task":1811140}
+            let taskId = null;
+            try {
+                const result = JSON.parse(responseText);
+                taskId = result.task || result.taskId || result.id;
+            } catch (e) {
+                const match = responseText.match(/\d+/);
+                if (match) taskId = match[0];
+            }
+            
+            return { success: true, taskId: taskId };
+        }
+        
+        // Основная функция отправки
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            
+            if (!validateForm()) {
+                const firstError = document.querySelector('.field-error');
+                if (firstError) {
+                    firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstError.focus();
+                }
+                showNotification('Пожалуйста, исправьте ошибки в форме', true);
+                return;
+            }
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            
+            try {
+                const requestData = {
+                    theme: document.getElementById('subject').value.trim() || '',
+                    name: fullname.value.trim(),
+                    inn: inn.value.trim(),
+                    organization: document.getElementById('orgname').value.trim() || '',
+                    email: email.value.trim(),
+                    tel: document.getElementById('phone').value.trim() || '',
+                    doctype: getPublicationTypeValue(),
+                    purp: getPurposeValue(),
+                    issue: description.value.trim(),
+                    file: getFileNames() || '',
+                    agree: consent.checked ? 'Да' : 'Нет'
+                };
+                
+                const result = await sendToWebhook(requestData);
+                
+                if (result.taskId) {
+                    showNotification(`Задача №${result.taskId} успешно создана!`);
+                } else {
+                    showNotification(`Форма успешно отправлена!`);
+                }
+                
+                // Очистка формы
+                form.reset();
+                selectedFiles = [];
+                updateFileList();
+                fileInput.value = '';
+                document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+                document.querySelectorAll('.error-message').forEach(el => el.style.display = 'none');
+                pubDiss.checked = true;
+                updatePurposeOptions();
+                
+            } catch (error) {
+                showNotification(`Ошибка: ${error.message}`, true);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
+        });
+        
+        // Живая валидация
+        fullname.addEventListener('blur', validateFullname);
+        inn.addEventListener('blur', validateInn);
+        email.addEventListener('blur', validateEmail);
+        description.addEventListener('blur', validateDescription);
+        consent.addEventListener('change', () => {
+            if (consent.checked) hideError(errorConsent, null);
+            else showError(errorConsent, 'Необходимо согласие на обработку данных.', null);
+        });
+        
+        const clearErrorOnInput = (input, errorEl, validator) => {
+            input.addEventListener('input', () => {
+                if (errorEl.style.display === 'block') validator();
+            });
+        };
+        clearErrorOnInput(fullname, errorFullname, validateFullname);
+        clearErrorOnInput(inn, errorInn, validateInn);
+        clearErrorOnInput(email, errorEmail, validateEmail);
+        clearErrorOnInput(description, errorDescription, validateDescription);
+    })();
+</script>
+</body>
+</html>
