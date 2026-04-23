@@ -205,6 +205,10 @@
         .toast-notification.success {
             background: #10b981;
         }
+        
+        .toast-notification.warning {
+            background: #f59e0b;
+        }
 
         @keyframes fadeUp {
             from {
@@ -263,6 +267,21 @@
             cursor: pointer;
             font-size: 14px;
             padding: 0 8px;
+        }
+        
+        .upload-progress {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 60px;
+            font-size: 0.9rem;
+            z-index: 1000;
+            text-align: center;
+            white-space: nowrap;
         }
     </style>
 </head>
@@ -626,20 +645,48 @@
             return selected ? selected.value : '';
         }
         
-        function showNotification(message, isError = false) {
+        function showNotification(message, isError = false, isWarning = false) {
             const existingToast = document.querySelector('.toast-notification');
             if (existingToast) existingToast.remove();
             const toast = document.createElement('div');
             toast.className = 'toast-notification';
             if (isError) toast.classList.add('error');
+            else if (isWarning) toast.classList.add('warning');
             else toast.classList.add('success');
-            toast.textContent = isError ? `❌ ${message}` : `✅ ${message}`;
+            
+            let icon = '';
+            if (isError) icon = '❌ ';
+            else if (isWarning) icon = '⚠️ ';
+            else icon = '✅ ';
+            
+            toast.textContent = icon + message;
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 5000);
         }
         
-        // Отправка на вебхук
+        function showProgress(message) {
+            let progressDiv = document.querySelector('.upload-progress');
+            if (!progressDiv) {
+                progressDiv = document.createElement('div');
+                progressDiv.className = 'upload-progress';
+                document.body.appendChild(progressDiv);
+            }
+            progressDiv.textContent = message;
+            progressDiv.style.display = 'block';
+            return progressDiv;
+        }
+        
+        function hideProgress() {
+            const progressDiv = document.querySelector('.upload-progress');
+            if (progressDiv) {
+                progressDiv.style.display = 'none';
+            }
+        }
+        
+        // Отправка данных формы на вебхук для создания задачи
         const WEBHOOK_URL = 'https://rsl.planfix.ru/webhook/json/test_oek';
+        // URL для загрузки файлов
+        const FILE_UPLOAD_URL = 'https://rsl.planfix.ru/webhook/file/form_fos_oek_file';
         
         async function sendToWebhook(formDataObj) {
             const requestBody = {
@@ -667,10 +714,10 @@
             const responseText = await response.text();
             
             if (!response.ok) {
-                throw new Error(`Ошибка: ${response.status}`);
+                throw new Error(`Ошибка создания задачи: ${response.status}`);
             }
             
-            // Извлекаем ID задачи из ответа {"task":1811140}
+            // Извлекаем ID задачи из ответа
             let taskId = null;
             try {
                 const result = JSON.parse(responseText);
@@ -680,7 +727,53 @@
                 if (match) taskId = match[0];
             }
             
+            if (!taskId) {
+                throw new Error('Не удалось получить ID задачи из ответа сервера');
+            }
+            
             return { success: true, taskId: taskId };
+        }
+        
+        // Функция загрузки файлов в Planfix
+        async function uploadFilesToPlanfix(taskId, files) {
+            if (!files || files.length === 0) {
+                return { success: true, uploadedCount: 0 };
+            }
+            
+            const uploadedFiles = [];
+            const failedFiles = [];
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const formData = new FormData();
+                formData.append('task_id', taskId);
+                formData.append('file', file, file.name);
+                
+                try {
+                    const response = await fetch(FILE_UPLOAD_URL, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const responseText = await response.text();
+                    
+                    if (response.ok) {
+                        uploadedFiles.push(file.name);
+                    } else {
+                        failedFiles.push({ name: file.name, error: `HTTP ${response.status}` });
+                    }
+                } catch (error) {
+                    failedFiles.push({ name: file.name, error: error.message });
+                }
+            }
+            
+            return {
+                success: failedFiles.length === 0,
+                uploadedCount: uploadedFiles.length,
+                failedCount: failedFiles.length,
+                uploadedFiles: uploadedFiles,
+                failedFiles: failedFiles
+            };
         }
         
         // Основная функция отправки
@@ -700,8 +793,13 @@
             const submitBtn = document.getElementById('submitBtn');
             const originalText = submitBtn.innerHTML;
             submitBtn.disabled = true;
+            submitBtn.innerHTML = 'Отправка...';
+            
+            let progressDiv = null;
+            let taskId = null;
             
             try {
+                // 1. Подготовка данных для создания задачи
                 const requestData = {
                     theme: document.getElementById('subject').value.trim() || '',
                     name: fullname.value.trim(),
@@ -716,27 +814,61 @@
                     agree: consent.checked ? 'Да' : 'Нет'
                 };
                 
-                const result = await sendToWebhook(requestData);
+                // 2. Создание задачи и получение ID
+                progressDiv = showProgress('Создание задачи...');
+                const taskResult = await sendToWebhook(requestData);
+                taskId = taskResult.taskId;
+                showNotification(`Задача №${taskId} успешно создана!`);
                 
-                if (result.taskId) {
-                    showNotification(`Задача №${result.taskId} успешно создана!`);
+                // 3. Загрузка файлов (если есть)
+                if (selectedFiles.length > 0) {
+                    progressDiv.textContent = `Загрузка файлов (${selectedFiles.length} шт.)...`;
+                    const uploadResult = await uploadFilesToPlanfix(taskId, selectedFiles);
+                    
+                    if (uploadResult.failedCount === 0) {
+                        showNotification(`Все ${uploadResult.uploadedCount} файлов загружены в задачу №${taskId}`);
+                    } else if (uploadResult.uploadedCount > 0) {
+                        showNotification(
+                            `Загружено ${uploadResult.uploadedCount} из ${selectedFiles.length} файлов. ${uploadResult.failedCount} файлов не загружены.`,
+                            false,
+                            true
+                        );
+                    } else {
+                        showNotification(`Не удалось загрузить файлы в задачу №${taskId}. Файлы можно прикрепить вручную.`, true);
+                    }
                 } else {
-                    showNotification(`Форма успешно отправлена!`);
+                    showNotification(`Задача №${taskId} создана без файлов`);
                 }
                 
-                // Очистка формы
+                // 4. Очистка формы
                 form.reset();
                 selectedFiles = [];
                 updateFileList();
                 fileInput.value = '';
                 document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
-                document.querySelectorAll('.error-message').forEach(el => el.style.display = 'none');
+                document.querySelectorAll('.error-message').forEach(el => {
+                    if (el.style.display === 'block') {
+                        el.style.display = 'none';
+                    }
+                });
                 pubDiss.checked = true;
                 updatePurposeOptions();
                 
+                // Сбрасываем радиокнопки цели обращения (кроме первой)
+                const purposeRadios = document.querySelectorAll('input[name="purpose"]');
+                if (purposeRadios.length > 0) {
+                    purposeRadios.forEach(radio => radio.checked = false);
+                }
+                
             } catch (error) {
-                showNotification(`Ошибка: ${error.message}`, true);
+                console.error('Ошибка:', error);
+                let errorMessage = error.message;
+                if (taskId) {
+                    errorMessage = `Задача №${taskId} создана, но произошла ошибка при загрузке файлов: ${error.message}`;
+                }
+                showNotification(errorMessage, true);
             } finally {
+                hideProgress();
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
             }
