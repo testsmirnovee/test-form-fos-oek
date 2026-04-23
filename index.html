@@ -252,6 +252,8 @@
             margin-top: 10px;
             font-size: 13px;
             color: #4a5568;
+            max-height: 200px;
+            overflow-y: auto;
         }
         
         .file-list-item {
@@ -279,6 +281,20 @@
             padding: 12px 28px;
             border-radius: 60px;
             font-size: 0.9rem;
+            z-index: 1000;
+            text-align: center;
+        }
+        
+        .progress-detail {
+            position: fixed;
+            bottom: 160px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: #ccc;
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-size: 0.8rem;
             z-index: 1000;
             text-align: center;
             white-space: nowrap;
@@ -463,6 +479,12 @@
         const fileInput = document.getElementById('fileInput');
         const fileListDiv = document.getElementById('fileList');
         
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+        
         function updateFileList() {
             if (selectedFiles.length === 0) {
                 fileListDiv.innerHTML = 'Файлы не выбраны';
@@ -472,7 +494,7 @@
             selectedFiles.forEach((file, index) => {
                 html += `
                     <div class="file-list-item">
-                        <span>📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)</span>
+                        <span>📎 ${file.name} (${formatFileSize(file.size)})</span>
                         <span class="remove-file" data-index="${index}">✖</span>
                     </div>
                 `;
@@ -664,7 +686,7 @@
             setTimeout(() => toast.remove(), 5000);
         }
         
-        function showProgress(message) {
+        function showProgress(message, detail = null) {
             let progressDiv = document.querySelector('.upload-progress');
             if (!progressDiv) {
                 progressDiv = document.createElement('div');
@@ -673,19 +695,32 @@
             }
             progressDiv.textContent = message;
             progressDiv.style.display = 'block';
+            
+            let detailDiv = document.querySelector('.progress-detail');
+            if (detail) {
+                if (!detailDiv) {
+                    detailDiv = document.createElement('div');
+                    detailDiv.className = 'progress-detail';
+                    document.body.appendChild(detailDiv);
+                }
+                detailDiv.textContent = detail;
+                detailDiv.style.display = 'block';
+            } else if (detailDiv) {
+                detailDiv.style.display = 'none';
+            }
+            
             return progressDiv;
         }
         
         function hideProgress() {
             const progressDiv = document.querySelector('.upload-progress');
-            if (progressDiv) {
-                progressDiv.style.display = 'none';
-            }
+            if (progressDiv) progressDiv.style.display = 'none';
+            const detailDiv = document.querySelector('.progress-detail');
+            if (detailDiv) detailDiv.style.display = 'none';
         }
         
         // Отправка данных формы на вебхук для создания задачи
         const WEBHOOK_URL = 'https://rsl.planfix.ru/webhook/json/test_oek';
-        // URL для загрузки файлов
         const FILE_UPLOAD_URL = 'https://rsl.planfix.ru/webhook/file/form_fos_oek_file';
         
         async function sendToWebhook(formDataObj) {
@@ -717,11 +752,11 @@
                 throw new Error(`Ошибка создания задачи: ${response.status}`);
             }
             
-            // Извлекаем ID задачи из ответа
             let taskId = null;
             try {
                 const result = JSON.parse(responseText);
                 taskId = result.task || result.taskId || result.id;
+                if (!taskId && typeof result === 'number') taskId = result;
             } catch (e) {
                 const match = responseText.match(/\d+/);
                 if (match) taskId = match[0];
@@ -734,17 +769,13 @@
             return { success: true, taskId: taskId };
         }
         
-        // Функция загрузки файлов в Planfix
-        async function uploadFilesToPlanfix(taskId, files) {
+        // Параллельная загрузка всех файлов
+        async function uploadFilesToPlanfixParallel(taskId, files) {
             if (!files || files.length === 0) {
-                return { success: true, uploadedCount: 0 };
+                return { success: true, uploadedCount: 0, failedCount: 0, uploadedFiles: [], failedFiles: [] };
             }
             
-            const uploadedFiles = [];
-            const failedFiles = [];
-            
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
+            const uploadPromises = files.map(async (file, index) => {
                 const formData = new FormData();
                 formData.append('task_id', taskId);
                 formData.append('file', file, file.name);
@@ -755,17 +786,32 @@
                         body: formData
                     });
                     
-                    const responseText = await response.text();
-                    
                     if (response.ok) {
-                        uploadedFiles.push(file.name);
+                        return { success: true, name: file.name, index: index };
                     } else {
-                        failedFiles.push({ name: file.name, error: `HTTP ${response.status}` });
+                        const errorText = await response.text();
+                        return { success: false, name: file.name, error: `HTTP ${response.status}: ${errorText.substring(0, 100)}`, index: index };
                     }
                 } catch (error) {
-                    failedFiles.push({ name: file.name, error: error.message });
+                    return { success: false, name: file.name, error: error.message, index: index };
                 }
-            }
+            });
+            
+            // Обновление прогресса по мере завершения загрузок
+            let completed = 0;
+            const total = files.length;
+            
+            const results = await Promise.all(uploadPromises.map(p => p.then(result => {
+                completed++;
+                const detailDiv = document.querySelector('.progress-detail');
+                if (detailDiv) {
+                    detailDiv.textContent = `Загружено ${completed} из ${total} файлов...`;
+                }
+                return result;
+            })));
+            
+            const uploadedFiles = results.filter(r => r.success).map(r => r.name);
+            const failedFiles = results.filter(r => !r.success).map(r => ({ name: r.name, error: r.error }));
             
             return {
                 success: failedFiles.length === 0,
@@ -795,7 +841,6 @@
             submitBtn.disabled = true;
             submitBtn.innerHTML = 'Отправка...';
             
-            let progressDiv = null;
             let taskId = null;
             
             try {
@@ -815,26 +860,31 @@
                 };
                 
                 // 2. Создание задачи и получение ID
-                progressDiv = showProgress('Создание задачи...');
+                showProgress('Создание задачи...');
                 const taskResult = await sendToWebhook(requestData);
                 taskId = taskResult.taskId;
                 showNotification(`Задача №${taskId} успешно создана!`);
                 
-                // 3. Загрузка файлов (если есть)
+                // 3. Параллельная загрузка файлов (если есть)
                 if (selectedFiles.length > 0) {
-                    progressDiv.textContent = `Загрузка файлов (${selectedFiles.length} шт.)...`;
-                    const uploadResult = await uploadFilesToPlanfix(taskId, selectedFiles);
+                    showProgress(
+                        `Загрузка ${selectedFiles.length} файлов...`,
+                        `Загружено 0 из ${selectedFiles.length} файлов...`
+                    );
+                    
+                    const uploadResult = await uploadFilesToPlanfixParallel(taskId, selectedFiles);
                     
                     if (uploadResult.failedCount === 0) {
                         showNotification(`Все ${uploadResult.uploadedCount} файлов загружены в задачу №${taskId}`);
                     } else if (uploadResult.uploadedCount > 0) {
+                        const failedNames = uploadResult.failedFiles.map(f => f.name).join(', ');
                         showNotification(
-                            `Загружено ${uploadResult.uploadedCount} из ${selectedFiles.length} файлов. ${uploadResult.failedCount} файлов не загружены.`,
+                            `Загружено ${uploadResult.uploadedCount} из ${selectedFiles.length} файлов. Не загружены: ${failedNames}`,
                             false,
                             true
                         );
                     } else {
-                        showNotification(`Не удалось загрузить файлы в задачу №${taskId}. Файлы можно прикрепить вручную.`, true);
+                        showNotification(`Не удалось загрузить файлы в задачу №${taskId}. Файлы нужно прикрепить вручную.`, true);
                     }
                 } else {
                     showNotification(`Задача №${taskId} создана без файлов`);
@@ -854,7 +904,6 @@
                 pubDiss.checked = true;
                 updatePurposeOptions();
                 
-                // Сбрасываем радиокнопки цели обращения (кроме первой)
                 const purposeRadios = document.querySelectorAll('input[name="purpose"]');
                 if (purposeRadios.length > 0) {
                     purposeRadios.forEach(radio => radio.checked = false);
@@ -864,7 +913,7 @@
                 console.error('Ошибка:', error);
                 let errorMessage = error.message;
                 if (taskId) {
-                    errorMessage = `Задача №${taskId} создана, но произошла ошибка при загрузке файлов: ${error.message}`;
+                    errorMessage = `Задача №${taskId} создана, но файлы не загружены: ${error.message}`;
                 }
                 showNotification(errorMessage, true);
             } finally {
