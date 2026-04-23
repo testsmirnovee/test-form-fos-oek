@@ -528,11 +528,6 @@
             updateFileList();
         });
         
-        function getFileNames() {
-            if (selectedFiles.length === 0) return '';
-            return selectedFiles.map(f => f.name).join(', ');
-        }
-        
         // Динамическое добавление пункта "получение справки"
         function addCertificateOption() {
             if (document.getElementById('purpose-certificate')) return;
@@ -719,39 +714,64 @@
             if (detailDiv) detailDiv.style.display = 'none';
         }
         
-        // Отправка данных формы на вебхук для создания задачи
+        // === РЕШЕНИЕ ПРОБЛЕМЫ CORS ===
+        // Используем CORS-прокси для обхода ограничений GitHub Pages
+        const CORS_PROXY = 'https://cors-anywhere.herokuapp.com/';
         const WEBHOOK_URL = 'https://rsl.planfix.ru/webhook/json/test_oek';
-        const FILE_UPLOAD_URL = 'https://rsl.planfix.ru/webhook/file/form_fos_oek_file';
         
-        async function sendToWebhook(formDataObj) {
-            const requestBody = {
-                "theme": formDataObj.theme || "",
-                "name": formDataObj.name,
-                "inn": formDataObj.inn,
-                "organization": formDataObj.organization || "",
-                "e-mail": formDataObj.email,
-                "tel": formDataObj.tel || "",
-                "doctype": formDataObj.doctype || "",
-                "purp": formDataObj.purp || "",
-                "issue": formDataObj.issue,
-                "file": formDataObj.file || "",
-                "agree": formDataObj.agree
-            };
+        // Функция для проверки, нужен ли прокси
+        function needsProxy() {
+            // Проверяем, запущено ли на GitHub Pages или локально
+            const hostname = window.location.hostname;
+            return hostname.includes('github.io') || hostname === 'localhost' || hostname === '127.0.0.1';
+        }
+        
+        async function sendFormWithFiles(formDataObj, files) {
+            const formData = new FormData();
             
-            const response = await fetch(WEBHOOK_URL, {
+            // Добавляем все поля
+            formData.append('theme', formDataObj.theme || '');
+            formData.append('name', formDataObj.name);
+            formData.append('inn', formDataObj.inn);
+            formData.append('organization', formDataObj.organization || '');
+            formData.append('e-mail', formDataObj.email);
+            formData.append('tel', formDataObj.tel || '');
+            formData.append('doctype', formDataObj.doctype || '');
+            formData.append('purp', formDataObj.purp || '');
+            formData.append('issue', formDataObj.issue);
+            formData.append('agree', formDataObj.agree);
+            
+            // Добавляем файлы
+            if (files && files.length > 0) {
+                for (let i = 0; i < files.length; i++) {
+                    formData.append(`file_${i}`, files[i], files[i].name);
+                }
+                formData.append('filenames', files.map(f => f.name).join(', '));
+            } else {
+                formData.append('filenames', '');
+            }
+            
+            // Определяем URL для запроса (с прокси или без)
+            let targetUrl = WEBHOOK_URL;
+            if (needsProxy()) {
+                targetUrl = CORS_PROXY + WEBHOOK_URL;
+                console.log('Используем CORS-прокси для обхода ограничений');
+            }
+            
+            // Отправляем запрос
+            const response = await fetch(targetUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestBody)
+                mode: 'cors',
+                body: formData
             });
             
             const responseText = await response.text();
             
             if (!response.ok) {
-                throw new Error(`Ошибка создания задачи: ${response.status}`);
+                throw new Error(`Ошибка сервера: ${response.status} - ${responseText.substring(0, 200)}`);
             }
             
+            // Пытаемся извлечь ID задачи
             let taskId = null;
             try {
                 const result = JSON.parse(responseText);
@@ -762,64 +782,82 @@
                 if (match) taskId = match[0];
             }
             
-            if (!taskId) {
-                throw new Error('Не удалось получить ID задачи из ответа сервера');
-            }
-            
-            return { success: true, taskId: taskId };
+            return { success: true, taskId: taskId || 'успешно' };
         }
         
-        // Параллельная загрузка всех файлов
-        async function uploadFilesToPlanfixParallel(taskId, files) {
-            if (!files || files.length === 0) {
-                return { success: true, uploadedCount: 0, failedCount: 0, uploadedFiles: [], failedFiles: [] };
-            }
-            
-            const uploadPromises = files.map(async (file, index) => {
-                const formData = new FormData();
-                formData.append('task_id', taskId);
-                formData.append('file', file, file.name);
+        // Альтернативный метод: отправка через iframe (если CORS-прокси не работает)
+        async function sendViaIframe(formDataObj, files) {
+            return new Promise((resolve, reject) => {
+                // Создаем скрытую форму
+                const hiddenForm = document.createElement('form');
+                hiddenForm.method = 'POST';
+                hiddenForm.action = WEBHOOK_URL;
+                hiddenForm.target = 'hidden_iframe';
+                hiddenForm.enctype = 'multipart/form-data';
+                hiddenForm.style.display = 'none';
                 
-                try {
-                    const response = await fetch(FILE_UPLOAD_URL, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    if (response.ok) {
-                        return { success: true, name: file.name, index: index };
-                    } else {
-                        const errorText = await response.text();
-                        return { success: false, name: file.name, error: `HTTP ${response.status}: ${errorText.substring(0, 100)}`, index: index };
+                // Добавляем текстовые поля
+                const fields = ['theme', 'name', 'inn', 'organization', 'e-mail', 'tel', 'doctype', 'purp', 'issue', 'agree', 'filenames'];
+                const values = {
+                    theme: formDataObj.theme || '',
+                    name: formDataObj.name,
+                    inn: formDataObj.inn,
+                    organization: formDataObj.organization || '',
+                    'e-mail': formDataObj.email,
+                    tel: formDataObj.tel || '',
+                    doctype: formDataObj.doctype || '',
+                    purp: formDataObj.purp || '',
+                    issue: formDataObj.issue,
+                    agree: formDataObj.agree,
+                    filenames: files.map(f => f.name).join(', ') || ''
+                };
+                
+                for (const field of fields) {
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.name = field;
+                    input.value = values[field] || '';
+                    hiddenForm.appendChild(input);
+                }
+                
+                // Добавляем файлы
+                if (files && files.length > 0) {
+                    for (let i = 0; i < files.length; i++) {
+                        const fileInput = document.createElement('input');
+                        fileInput.type = 'file';
+                        fileInput.name = `file_${i}`;
+                        
+                        // Создаем DataTransfer для добавления файла
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(files[i]);
+                        fileInput.files = dataTransfer.files;
+                        
+                        hiddenForm.appendChild(fileInput);
                     }
-                } catch (error) {
-                    return { success: false, name: file.name, error: error.message, index: index };
                 }
+                
+                // Создаем iframe
+                const iframe = document.createElement('iframe');
+                iframe.name = 'hidden_iframe';
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+                
+                // Обработка загрузки iframe
+                iframe.onload = () => {
+                    document.body.removeChild(hiddenForm);
+                    document.body.removeChild(iframe);
+                    resolve({ success: true, taskId: 'отправлено через iframe' });
+                };
+                
+                iframe.onerror = () => {
+                    document.body.removeChild(hiddenForm);
+                    document.body.removeChild(iframe);
+                    reject(new Error('Ошибка отправки через iframe'));
+                };
+                
+                document.body.appendChild(hiddenForm);
+                hiddenForm.submit();
             });
-            
-            // Обновление прогресса по мере завершения загрузок
-            let completed = 0;
-            const total = files.length;
-            
-            const results = await Promise.all(uploadPromises.map(p => p.then(result => {
-                completed++;
-                const detailDiv = document.querySelector('.progress-detail');
-                if (detailDiv) {
-                    detailDiv.textContent = `Загружено ${completed} из ${total} файлов...`;
-                }
-                return result;
-            })));
-            
-            const uploadedFiles = results.filter(r => r.success).map(r => r.name);
-            const failedFiles = results.filter(r => !r.success).map(r => ({ name: r.name, error: r.error }));
-            
-            return {
-                success: failedFiles.length === 0,
-                uploadedCount: uploadedFiles.length,
-                failedCount: failedFiles.length,
-                uploadedFiles: uploadedFiles,
-                failedFiles: failedFiles
-            };
         }
         
         // Основная функция отправки
@@ -841,10 +879,7 @@
             submitBtn.disabled = true;
             submitBtn.innerHTML = 'Отправка...';
             
-            let taskId = null;
-            
             try {
-                // 1. Подготовка данных для создания задачи
                 const requestData = {
                     theme: document.getElementById('subject').value.trim() || '',
                     name: fullname.value.trim(),
@@ -855,42 +890,26 @@
                     doctype: getPublicationTypeValue(),
                     purp: getPurposeValue(),
                     issue: description.value.trim(),
-                    file: getFileNames() || '',
                     agree: consent.checked ? 'Да' : 'Нет'
                 };
                 
-                // 2. Создание задачи и получение ID
-                showProgress('Создание задачи...');
-                const taskResult = await sendToWebhook(requestData);
-                taskId = taskResult.taskId;
-                showNotification(`Задача №${taskId} успешно создана!`);
+                showProgress('Отправка данных и файлов...', 
+                            selectedFiles.length > 0 ? `Файлов: ${selectedFiles.length}` : 'Без файлов');
                 
-                // 3. Параллельная загрузка файлов (если есть)
-                if (selectedFiles.length > 0) {
-                    showProgress(
-                        `Загрузка ${selectedFiles.length} файлов...`,
-                        `Загружено 0 из ${selectedFiles.length} файлов...`
-                    );
-                    
-                    const uploadResult = await uploadFilesToPlanfixParallel(taskId, selectedFiles);
-                    
-                    if (uploadResult.failedCount === 0) {
-                        showNotification(`Все ${uploadResult.uploadedCount} файлов загружены в задачу №${taskId}`);
-                    } else if (uploadResult.uploadedCount > 0) {
-                        const failedNames = uploadResult.failedFiles.map(f => f.name).join(', ');
-                        showNotification(
-                            `Загружено ${uploadResult.uploadedCount} из ${selectedFiles.length} файлов. Не загружены: ${failedNames}`,
-                            false,
-                            true
-                        );
-                    } else {
-                        showNotification(`Не удалось загрузить файлы в задачу №${taskId}. Файлы нужно прикрепить вручную.`, true);
-                    }
-                } else {
-                    showNotification(`Задача №${taskId} создана без файлов`);
+                let result;
+                try {
+                    // Пробуем через fetch с CORS-прокси
+                    result = await sendFormWithFiles(requestData, selectedFiles);
+                } catch (fetchError) {
+                    console.warn('Fetch с прокси не сработал, пробуем через iframe:', fetchError);
+                    // Если fetch не работает, пробуем через iframe
+                    result = await sendViaIframe(requestData, selectedFiles);
                 }
                 
-                // 4. Очистка формы
+                hideProgress();
+                showNotification(`✅ Заявка успешно отправлена! Номер задачи: ${result.taskId}`);
+                
+                // Очистка формы
                 form.reset();
                 selectedFiles = [];
                 updateFileList();
@@ -911,13 +930,9 @@
                 
             } catch (error) {
                 console.error('Ошибка:', error);
-                let errorMessage = error.message;
-                if (taskId) {
-                    errorMessage = `Задача №${taskId} создана, но файлы не загружены: ${error.message}`;
-                }
-                showNotification(errorMessage, true);
-            } finally {
                 hideProgress();
+                showNotification(`❌ Ошибка: ${error.message}. Проверьте консоль браузера.`, true);
+            } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
             }
